@@ -1,0 +1,3 @@
+0001-dont-depend-on-install-when-running-tests.patch
+0002-pass-PYTHONPATH-to-the-test-runner.patch
+linux-handle-missing-sys-class-power_supply-in-sensors_ba.patch

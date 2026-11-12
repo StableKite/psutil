@@ -1,0 +1,45 @@
+From: Benjamin Drung <benjamin.drung@canonical.com>
+Date: Mon, 30 Jun 2025 14:01:07 +0200
+Subject: linux: handle missing /sys/class/power_supply in sensors_battery()
+
+The test `TestModuleFunctionsLeaks.test_sensors_battery` fails on Ubuntu
+s390x in `sensors_battery` with:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory: '/sys/class/power_supply'
+```
+
+Fix `sensors_battery` to return `None` in case `POWER_SUPPLY_PATH` does
+not exist.
+
+Fixes: https://github.com/giampaolo/psutil/issues/2067
+Forwarded: https://github.com/giampaolo/psutil/pull/2595
+Signed-off-by: Benjamin Drung <benjamin.drung@canonical.com>
+---
+ psutil/_pslinux.py | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/psutil/_pslinux.py b/psutil/_pslinux.py
+index 8cc64e9..94d3da6 100644
+--- a/psutil/_pslinux.py
++++ b/psutil/_pslinux.py
+@@ -1470,11 +1470,14 @@ def sensors_battery():
+                     return ret.strip()
+         return None
+ 
+-    bats = [
+-        x
+-        for x in os.listdir(POWER_SUPPLY_PATH)
+-        if x.startswith('BAT') or 'battery' in x.lower()
+-    ]
++    try:
++        bats = [
++            x
++            for x in os.listdir(POWER_SUPPLY_PATH)
++            if x.startswith('BAT') or 'battery' in x.lower()
++        ]
++    except FileNotFoundError:
++        return None
+     if not bats:
+         return None
+     # Get the first available battery. Usually this is "BAT0", except

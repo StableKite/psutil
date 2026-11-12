@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+
+# fake CI running, https://github.com/giampaolo/psutil/issues/2104
+export APPVEYOR=
+# skipping tests:
+#   - test_sensors_temperatures: https://github.com/giampaolo/psutil/issues/2551
+#   - test_ips: https://github.com/giampaolo/psutil/issues/2555
+#   - test_emulate_use_cpuinfo,
+#     test_emulate_use_second_file,
+#     test_cpu_freq,
+#     test_against_nproc,
+#     test_cpu_affinity: https://github.com/giampaolo/psutil/issues/2557
+#   - all other tests skipped since they dont run reliably in chroot/containers
+export PYBUILD_TEST_ARGS = --verbose \
+                           -k '    not test_disk_partition \
+			       and not test_import_all \
+			       and not test_against_findmnt \
+			       and not test_comparisons \
+			       and not test_who \
+			       and not test_invocation \
+			       and not test_users \
+			       and not test_procsmem \
+			       and not test_all \
+			       and not test_sensors_temperatures \
+			       and not test_ips \
+			       and not test_emulate_use_cpuinfo \
+			       and not test_emulate_use_second_file \
+			       and not test_cpu_freq \
+			       and not test_against_nproc \
+			       and not test_cpu_freq \
+			       and not test_cpu_affinity \
+			   '
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_installchangelogs:
+	dh_installchangelogs HISTORY.rst
+
+override_dh_installdocs:
+	dh_installdocs -X.DS_Store
+
+override_dh_compress:
+	dh_compress -X.py
