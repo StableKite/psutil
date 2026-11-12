@@ -1,0 +1,76 @@
+Description: Backport Python 3.15 signed RLIM_INFINITY normalization and regressions
+Author: Giampaolo Rodola <g.rodola@gmail.com>
+Author: Robolightning <irobolightning@gmail.com>
+Origin: https://github.com/giampaolo/psutil/pull/2871
+Forwarded: not-needed
+Last-Update: 2026-11-12
+
+--- a/psutil/_pslinux.py
++++ b/psutil/_pslinux.py
+@@ -82,6 +82,10 @@
+ PAGESIZE = cext_posix.getpagesize()
+ LITTLE_ENDIAN = sys.byteorder == 'little'
+ UNSET = object()
++
++# Python 3.15 changed resource.prlimit() to return RLIM_INFINITY as the
++# unsigned 2**64-1 instead of -1; used to map it back to -1.
++RLIM_INFINITY_UNSIGNED = cext_posix.RLIM_INFINITY & 0xFFFFFFFFFFFFFFFF
+ 
+ # "man iostat" states that sectors are equivalent with blocks and have
+ # a size of 512 bytes. Despite this value can be queried at runtime
+@@ -2216,7 +2220,14 @@
+             try:
+                 if limits is None:
+                     # get
+-                    return resource.prlimit(self.pid, resource_)
++                    soft, hard = resource.prlimit(self.pid, resource_)
++                    # Python 3.15 returns RLIM_INFINITY as the unsigned
++                    # 2**64-1 instead of -1; map it back for consistency.
++                    if soft == RLIM_INFINITY_UNSIGNED:
++                        soft = cext_posix.RLIM_INFINITY
++                    if hard == RLIM_INFINITY_UNSIGNED:
++                        hard = cext_posix.RLIM_INFINITY
++                    return soft, hard
+                 else:
+                     # set
+                     if len(limits) != 2:
+--- a/psutil/tests/test_linux.py
++++ b/psutil/tests/test_linux.py
+@@ -2198,6 +2198,21 @@
+         assert p._get_ident()[1] == p._proc.create_time(monotonic=True)
+ 
+ 
++    def test_rlimit_infinity_normalized(self):
++        # Python 3.15 changed resource.prlimit() to return RLIM_INFINITY
++        # as the unsigned 2**64-1 instead of -1; psutil maps it back.
++        unsigned = 2**64 - 1
++        p = psutil.Process()
++        with mock.patch(
++            "psutil._pslinux.resource.prlimit",
++            return_value=(unsigned, unsigned),
++        ) as m:
++            soft, hard = p.rlimit(psutil.RLIMIT_FSIZE)
++            assert m.called
++        assert soft == psutil.RLIM_INFINITY
++        assert hard == psutil.RLIM_INFINITY
++
++
+ @pytest.mark.skipif(not LINUX, reason="LINUX only")
+ class TestProcessAgainstStatus(PsutilTestCase):
+     """/proc/pid/stat and /proc/pid/status have many values in common.
+--- a/psutil/tests/test_process.py
++++ b/psutil/tests/test_process.py
+@@ -431,7 +431,12 @@
+                 # number instead of -1. It looks like a bug with PyPy.
+                 if PYPY:
+                     continue
+-                assert p.rlimit(value) == resource.getrlimit(value)
++                # psutil retains its public signed infinity value on Python3.15.
++                expected = tuple(
++                    psutil.RLIM_INFINITY if limit == resource.RLIM_INFINITY else limit
++                    for limit in resource.getrlimit(value)
++                )
++                assert p.rlimit(value) == expected
+             else:
+                 ret = p.rlimit(value)
+                 assert len(ret) == 2
