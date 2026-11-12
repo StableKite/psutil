@@ -1,0 +1,47 @@
+Description: Make CPU topology and frequency fixtures independent of host policy count
+Author: Giampaolo Rodola <g.rodola@gmail.com>
+Author: Robolightning <irobolightning@gmail.com>
+Origin: https://github.com/giampaolo/psutil/blob/master/tests/test_linux.py
+Forwarded: not-needed
+Last-Update: 2026-11-12
+
+--- a/psutil/tests/test_linux.py
++++ b/psutil/tests/test_linux.py
+@@ -721,13 +721,15 @@
+         not shutil.which("lscpu"), reason="lscpu utility not available"
+     )
+     def test_against_lscpu(self):
+-        out = sh("lscpu -p")
+-        core_ids = set()
+-        for line in out.split('\n'):
+-            if not line.startswith('#'):
+-                fields = line.split(',')
+-                core_ids.add(fields[1])
+-        assert psutil.cpu_count(logical=False) == len(core_ids)
++        cores = 0
++        per_socket = 0
++        for line in sh("lscpu").splitlines():
++            line = line.strip()
++            if line.startswith("Core(s) per socket:"):
++                per_socket = int(line.split(":")[1])
++            elif line.startswith("Socket(s):"):
++                cores += per_socket * int(line.split(":")[1])
++        assert psutil.cpu_count(logical=False) == cores
+ 
+     @pytest.mark.skipif(
+         platform.machine() not in {"x86_64", "i686"}, reason="x86_64/i686 only"
+@@ -865,9 +867,13 @@
+         orig_open = open
+         with mock.patch("builtins.open", side_effect=open_mock):
+             with mock.patch('os.path.exists', return_value=True):
++                # Keep this two-policy fixture independent of host sysfs.
+                 with mock.patch(
+                     'psutil._pslinux.cpu_count_logical', return_value=2
+-                ):
++                ), mock.patch('glob.glob', return_value=[
++                    '/sys/devices/system/cpu/cpufreq/policy0',
++                    '/sys/devices/system/cpu/cpufreq/policy1',
++                ]):
+                     freq = psutil.cpu_freq(percpu=True)
+                     assert freq[0].current == 100.0
+                     if freq[0].min != 0.0:

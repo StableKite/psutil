@@ -2,3 +2,4 @@
 0002-pass-PYTHONPATH-to-the-test-runner.patch
 linux-handle-missing-sys-class-power_supply-in-sensors_ba.patch
 python315-rlim-infinity.patch
+isolated-cpu-fixtures.patch
